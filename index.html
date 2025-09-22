@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentiment Analysis Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Poppins",sans-serif;}
+body{min-height:100vh;background:linear-gradient(135deg,#fdfbfb,#ebedee);color:#333;}
+header{text-align:center;padding:40px 20px;}
+header h1{font-size:2.5rem;margin-bottom:10px;font-weight:700;color:#111;}
+header p{font-size:1.1rem;opacity:0.85;}
+.container{max-width:1200px;margin:20px auto;padding:20px;display:grid;gap:30px;}
+.card{background:#fff;padding:25px;border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,0.1);transition:transform 0.3s,box-shadow 0.3s;}
+.card:hover{transform:translateY(-5px);box-shadow:0 12px 25px rgba(0,0,0,0.2);}
+h2{margin-bottom:15px;font-weight:600;color:#111;text-align:center;}
+button,input[type="file"]{padding:10px 20px;border:none;background:linear-gradient(135deg,#007BFF,#00C6FF);color:white;border-radius:10px;cursor:pointer;font-size:15px;margin:5px 5px 15px 0;transition:all 0.3s;}
+button:hover,input[type="file"]:hover{background:linear-gradient(135deg,#0056b3,#0099cc);transform:scale(1.05);}
+#fileOutput{margin-top:15px;padding:15px;border-radius:12px;background:#f5f5f5;font-size:1rem;line-height:1.6;}
+#greeting{margin-top:15px;padding:12px;border-radius:10px;font-size:1rem;font-weight:600;color:#007BFF;text-align:center;display:none;animation:fadeIn 0.8s ease-in-out;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:30px;}
+canvas{max-width:100%;height:400px !important;}
+#chartCaption{margin-bottom:15px;font-weight:600;text-align:center;color:#007BFF;display:none;}
+#savedComments{margin-top:15px;}
+select{padding:10px 15px;border:1px solid #ccc;border-radius:8px;font-size:15px;color:#111;background:#fff;margin-bottom:15px;cursor:pointer;}
+select:focus{outline:none;border-color:#007BFF;box-shadow:0 0 5px rgba(0,123,255,0.5);}
+.comment-box{background:#f5f5f5;padding:10px;margin:8px 0;border-radius:8px;}
+.flow-future{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:20px;}
+.flow-box{background:#fff;border-radius:16px;padding:20px;text-align:center;box-shadow:0 6px 15px rgba(0,0,0,0.1);}
+.flow-box h3{color:#111;margin-bottom:10px;}
+.flow-box p{font-size:0.95rem;opacity:0.85;}
+footer{text-align:center;padding:20px;background:#f9f9f9;margin-top:40px;border-top:1px solid #ddd;font-size:0.9rem;color:#555;}
+</style>
+</head>
+<body>
+<header>
+  <h1>📊 Sentiment Analysis Dashboard</h1>
+  <p>Analyze bulk CSV feedback with AI-powered insights</p>
+</header>
+
+<div class="container">
+
+  <!-- CSV Upload & Output -->
+  <div class="card">
+    <h2>📂 Analyze Multiple Comments (CSV)</h2>
+    <p>Upload a CSV file with one comment per line.</p>
+    <input type="file" id="fileInput" accept=".csv">
+    <button id="downloadBtn" style="display:none;">⬇ Download Results (CSV)</button>
+    <button id="downloadChartBtn" style="display:none;">🖼 Download Charts (PNG)</button>
+    <div id="fileOutput"></div>
+    <div id="greeting"></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="card" id="chartsCard" style="display:none;">
+    <h2>📈 Sentiment Distribution & Comparison</h2>
+    <div class="charts-row">
+      <div>
+        <h3 style="text-align:center;color:#111;">Pie Chart</h3>
+        <canvas id="sentimentChart"></canvas>
+      </div>
+      <div>
+        <h3 style="text-align:center;color:#111;">Bar Graph</h3>
+        <canvas id="barChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Saved Comments -->
+  <div class="card" id="savedCard" style="display:none;">
+    <h2>📝 Saved Comments</h2>
+    <label for="sentimentFilter" style="font-weight:600;display:block;margin-bottom:8px;">Filter by Sentiment:</label>
+    <select id="sentimentFilter">
+      <option value="All">Show All</option>
+      <option value="Positive">Positive 👍</option>
+      <option value="Negative">Negative 👎</option>
+      <option value="Neutral">Neutral 😐</option>
+    </select>
+    <div id="savedComments">No comments yet.</div>
+  </div>
+
+</div>
+
+<footer>
+  <p>⚡ Prototype | Sentiment Analysis Module with Advanced Features</p>
+</footer>
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+  Chart.register(ChartDataLabels);
+
+  let chart, barChart;
+  let savedComments=[];
+
+  const positiveWords=["love","great","good","helpful","excellent","happy","support","amazing","like","awesome","fantastic","wonderful"];
+  const negativeWords=["bad","terrible","unfair","poor","sad","angry","hate","worst","disappointed","stupid","idiot","useless","garbage","horrible","awful","dumb","nonsense","annoying","sucks"];
+  const greetings=["🎉 Thank you for sharing your thoughts!","🙏 We appreciate your feedback!","🌟 Your opinion matters a lot to us!","💡 Thanks for contributing!","🚀 Your input helps us improve!"];
+
+  function getSentiment(text){
+    text=text.toLowerCase();
+    let score=0;
+    positiveWords.forEach(w=>{if(text.includes(w)) score+=1;});
+    negativeWords.forEach(w=>{if(text.includes(w)) score-=1;});
+    if(score>0) return "Positive";
+    if(score<0) return "Negative";
+    return "Neutral";
+  }
+
+  function showGreeting(){
+    const randomGreeting=greetings[Math.floor(Math.random()*greetings.length)];
+    const greetingBox=document.getElementById("greeting");
+    greetingBox.textContent=randomGreeting;
+    greetingBox.style.display="block";
+  }
+
+  function renderSavedComments(filter="All"){
+    let filtered=filter==="All"?savedComments:savedComments.filter(c=>c.result===filter);
+    let html=filtered.length===0?"<p>No comments found.</p>":filtered.map(c=>`<div class="comment-box">${c.comment.trim()} <strong>(${c.result})</strong></div>`).join("");
+    document.getElementById("savedComments").innerHTML=html;
+  }
+
+  document.getElementById("sentimentFilter").addEventListener("change",()=>renderSavedComments(document.getElementById("sentimentFilter").value));
+
+  document.getElementById("fileInput").addEventListener("change", function(event){
+    const file=event.target.files[0]; 
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const rows=e.target.result.split("\n").filter(r=>r.trim()!=="");
+      let positive=0,negative=0,neutral=0;
+      savedComments=[];
+      rows.forEach(row=>{
+        const sentiment=getSentiment(row);
+        if(sentiment==="Positive") positive++;
+        else if(sentiment==="Negative") negative++;
+        else neutral++;
+        savedComments.push({comment:row,result:sentiment});
+      });
+      document.getElementById("fileOutput").innerHTML=`<p><strong>File Analysis:</strong></p>
+        <p>👍 Positive: ${positive}</p><p>👎 Negative: ${negative}</p><p>😐 Neutral: ${neutral}</p>`;
+      document.getElementById("chartsCard").style.display="block";
+      document.getElementById("savedCard").style.display="block";
+      document.getElementById("downloadBtn").style.display="inline-block";
+      document.getElementById("downloadChartBtn").style.display="inline-block";
+      renderSavedComments("All");
+      updateCharts({positive,negative,neutral});
+      showGreeting();
+    };
+    reader.readAsText(file);
+  });
+
+  function updateCharts(data){
+    if(chart) chart.destroy();
+    if(barChart) barChart.destroy();
+    chart=new Chart(document.getElementById("sentimentChart"),{
+      type:'doughnut',
+      data:{labels:["Positive","Negative","Neutral"],datasets:[{data:[data.positive,data.negative,data.neutral],backgroundColor:["#4CAF50","#F44336","#FFC107"]}]},
+      options:{plugins:{legend:{position:"bottom"},datalabels:{color:'#fff',font:{weight:'bold',size:14},formatter:(value,ctx)=>{let total=ctx.chart._metasets[0].total;return((value/total)*100).toFixed(1)+"%";}}}} ,
+      plugins:[ChartDataLabels]
+    });
+    barChart=new Chart(document.getElementById("barChart"),{
+      type:"bar",
+      data:{labels:["Positive","Negative","Neutral"],datasets:[{data:[data.positive,data.negative,data.neutral],backgroundColor:["#4CAF50","#F44336","#FFC107"]}]},
+      options:{scales:{x:{ticks:{color:"#111"}},y:{ticks:{color:"#111"}}},plugins:{legend:{display:false}}}
+    });
+  }
+
+  document.getElementById("downloadBtn").addEventListener("click", function(){
+    if(!savedComments.length) return;
+    const csvRows=[["Sentiment","Comment"]];
+    savedComments.forEach(c=>csvRows.push([c.result,c.comment.replace(/,/g," ")]));
+    const csvContent="data:text/csv;charset=utf-8,"+csvRows.map(e=>e.join(",")).join("\n");
+    const link=document.createElement("a");
+    link.href=encodeURI(csvContent);
+    link.download="sentiment_results.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
+
+  document.getElementById("downloadChartBtn").addEventListener("click",function(){
+    if(!chart || !barChart) return;
+    const canvas=document.createElement("canvas");
+    canvas.width=800;canvas.height=400;
+    const ctx=canvas.getContext("2d");
+    const img1=new Image();const img2=new Image();
+    img1.onload=function(){
+      ctx.drawImage(img1,0,0,400,400);
+      img2.onload=function(){
+        ctx.drawImage(img2,400,0,400,400);
+        const link=document.createElement("a");
+        link.href=canvas.toDataURL("image/png");
+        link.download="sentiment_charts.png";
+        link.click();
+      };
+      img2.src=barChart.toBase64Image();
+    };
+    img1.src=chart.toBase64Image();
+  });
+
+})
+</script>
+</body>
+</html>
